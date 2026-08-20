@@ -73,6 +73,12 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
                 <div id="history-items-container" class="space-y-4 min-h-[300px]">
                     <p class="text-center text-gray-400 py-12 text-sm animate-pulse">Carregando lista de captações...</p>
                 </div>
+
+                <div id="history-pagination" class="flex items-center justify-between gap-3 pt-2">
+                    <button id="btn-history-prev" type="button" class="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-bold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed">← Anterior</button>
+                    <span id="history-page-indicator" class="text-xs font-bold text-gray-500">Página 1</span>
+                    <button id="btn-history-next" type="button" class="px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl disabled:opacity-40 disabled:cursor-not-allowed">Próxima →</button>
+                </div>
             </div>
 
             <!-- Modal: Detalhes do Status da Assinatura -->
@@ -128,6 +134,10 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
     function mountHistoryView() {
         const user = authService.getCurrentUser();
         let allCaptures = [];
+        let userCapturePageCache = [];
+        let userCapturePageCursors = [];
+        let userCaptureCurrentPage = 1;
+        let userCapturesHasMore = true;
         let generatedSigUrl = "";
 
         // Verificar parâmetro de busca na URL
@@ -142,6 +152,41 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
             const searchInput = document.getElementById("hist-search-input");
             if (searchInput) searchInput.value = initialSearch;
         }
+
+        const getLoadedCaptures = () => userCapturePageCache.flat();
+
+        const loadNextUserCapturePage = async () => {
+            if (!user) return [];
+            const startAfterDoc = userCapturePageCursors[userCapturePageCursors.length - 1] || null;
+            const result = await captacaoService.fetchUserCapturesPage(user.uid, {
+                limitCount: 10,
+                startAfterDoc
+            });
+
+            if (!result.items.length) {
+                userCapturesHasMore = false;
+                return [];
+            }
+
+            userCapturePageCache.push(result.items);
+            userCapturePageCursors.push(result.lastDoc);
+            userCapturesHasMore = result.hasMore;
+            return result.items;
+        };
+
+        const loadCaptures = async () => {
+            const container = document.getElementById("history-items-container");
+            if (!container) return;
+            if (!user) return;
+
+            if (!userCapturePageCache.length) {
+                container.innerHTML = '<p class="text-center text-gray-400 py-12 text-sm animate-pulse">Carregando lista de captações...</p>';
+                await loadNextUserCapturePage();
+            }
+
+            allCaptures = getLoadedCaptures();
+            renderHistoryList();
+        };
 
         const createCaptureCardHtml = (data) => {
             const date = data.createdAt ? new Date(data.createdAt.seconds * 1000).toLocaleDateString('pt-BR') : '-';
@@ -245,30 +290,20 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
             `;
         };
 
-        const loadCaptures = async () => {
-            if (!user) return;
-            try {
-                showGlobalSpinner("Carregando captações...");
-                allCaptures = await captacaoService.fetchUserCaptures(user.uid);
-                hideGlobalSpinner();
-                renderHistoryList();
-            } catch (e) {
-                hideGlobalSpinner();
-                console.error("Erro ao buscar captações:", e);
-                const container = document.getElementById("history-items-container");
-                if (container) container.innerHTML = '<p class="text-center text-red-500 py-12 text-sm">Falha ao carregar suas captações. Tente atualizar.</p>';
-            }
-        };
-
         const renderHistoryList = () => {
             const container = document.getElementById("history-items-container");
+            const pageIndicator = document.getElementById("history-page-indicator");
+            const prevBtn = document.getElementById("btn-history-prev");
+            const nextBtn = document.getElementById("btn-history-next");
             if (!container) return;
 
+            const loadedCaptures = getLoadedCaptures();
             const term = document.getElementById("hist-search-input")?.value.toLowerCase().trim() || "";
             const sigFilter = document.getElementById("hist-filter-signature")?.value || "all";
             const sortBy = document.getElementById("hist-sort-by")?.value || "createdAt_desc";
 
-            let filtered = allCaptures.filter(c => {
+            const pageItems = userCapturePageCache[userCaptureCurrentPage - 1] || [];
+            let filtered = pageItems.filter(c => {
                 if (term) {
                     const matchEnd = (c.imovelEndereco || "").toLowerCase().includes(term);
                     const matchBairro = (c.imovelBairro || "").toLowerCase().includes(term);
@@ -291,6 +326,10 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
                 if (sortBy === "imovelEndereco_asc") return (a.imovelEndereco || "").localeCompare(b.imovelEndereco || "");
                 return 0;
             });
+
+            if (pageIndicator) pageIndicator.innerText = `Página ${userCaptureCurrentPage} • ${loadedCaptures.length} carregadas`;
+            if (prevBtn) prevBtn.disabled = userCaptureCurrentPage === 1;
+            if (nextBtn) nextBtn.disabled = !userCapturesHasMore && userCaptureCurrentPage >= userCapturePageCache.length;
 
             if (filtered.length === 0) {
                 container.innerHTML = `
@@ -467,7 +506,33 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
         document.getElementById("hist-search-input")?.addEventListener("input", renderHistoryList);
         document.getElementById("hist-filter-signature")?.addEventListener("change", renderHistoryList);
         document.getElementById("hist-sort-by")?.addEventListener("change", renderHistoryList);
-        document.getElementById("btn-refresh-history")?.addEventListener("click", loadCaptures);
+        document.getElementById("btn-history-prev")?.addEventListener("click", () => {
+            if (userCaptureCurrentPage > 1) {
+                userCaptureCurrentPage -= 1;
+                renderHistoryList();
+            }
+        });
+        document.getElementById("btn-history-next")?.addEventListener("click", async () => {
+            if (userCaptureCurrentPage < userCapturePageCache.length) {
+                userCaptureCurrentPage += 1;
+                renderHistoryList();
+                return;
+            }
+            if (!userCapturesHasMore || !user) return;
+            await loadNextUserCapturePage();
+            if (userCapturePageCache.length > 0) {
+                userCaptureCurrentPage = userCapturePageCache.length;
+                renderHistoryList();
+            }
+        });
+        document.getElementById("btn-refresh-history")?.addEventListener("click", async () => {
+            userCapturePageCache = [];
+            userCapturePageCursors = [];
+            userCaptureCurrentPage = 1;
+            userCapturesHasMore = true;
+            allCaptures = [];
+            await loadCaptures();
+        });
 
         // Eventos de Modais
         document.getElementById("btn-close-sig-status-modal")?.addEventListener("click", () => document.getElementById("modal-signature-status")?.classList.add("hidden"));

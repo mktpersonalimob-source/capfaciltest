@@ -427,17 +427,40 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
         // 1. CAPTAÇÕES (PAGINADAS 10 EM 10)
         // ════════════════════════════════════════════════════════
         let allCapturesCache = [];
+        let capturesPageCache = [];
+        let capturesPageCursors = [];
         let currentPage = 1;
+        let capturesHasMore = true;
         const pageSize = 10;
+
+        const fetchNextCapturePage = async () => {
+            const startAfterDoc = capturesPageCursors[capturesPageCursors.length - 1] || null;
+            const response = await captacaoService.fetchCapturesPage({
+                limitCount: pageSize,
+                startAfterDoc
+            });
+
+            if (!response.items.length) {
+                capturesHasMore = false;
+                return [];
+            }
+
+            capturesPageCache.push(response.items);
+            capturesPageCursors.push(response.lastDoc);
+            capturesHasMore = response.hasMore;
+            return response.items;
+        };
 
         const loadCapturesPaged = async (page = 1) => {
             currentPage = page;
             const container = document.getElementById("adm-captures-list-container");
             if (!container) return;
-            if (allCapturesCache.length === 0) {
+
+            if (!capturesPageCache.length) {
                 container.innerHTML = '<p class="text-center text-gray-400 py-10 animate-pulse text-sm">Buscando captações...</p>';
-                allCapturesCache = await captacaoService.fetchAllCaptures();
+                await fetchNextCapturePage();
             }
+
             renderCapturesCards();
         };
 
@@ -445,8 +468,9 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
             const container = document.getElementById("adm-captures-list-container");
             if (!container) return;
 
+            const pageItems = capturesPageCache[currentPage - 1] || [];
             const term = document.getElementById("adm-captures-search")?.value.toLowerCase().trim() || "";
-            const filtered = allCapturesCache.filter(c => {
+            const filtered = pageItems.filter(c => {
                 if (!term) return true;
                 return (c.imovelEndereco || "").toLowerCase().includes(term)
                     || (c.propNome || "").toLowerCase().includes(term)
@@ -456,26 +480,25 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
                     || (c.id || "").toLowerCase().includes(term);
             });
 
-            const totalPages = Math.ceil(filtered.length / pageSize) || 1;
-            if (currentPage > totalPages) currentPage = totalPages;
             if (currentPage < 1) currentPage = 1;
 
-            const pageItems = filtered.slice((currentPage - 1) * pageSize, currentPage * pageSize);
-
             const indEl = document.getElementById("adm-cap-page-indicator");
-            if (indEl) indEl.innerText = `Página ${currentPage} de ${totalPages} (${filtered.length} captações no total)`;
+            if (indEl) {
+                const totalLoaded = capturesPageCache.reduce((acc, page) => acc + page.length, 0);
+                indEl.innerText = `Página ${currentPage} • ${totalLoaded} captações carregadas ${capturesHasMore ? '• próximos lotes de 10' : '• última página'}`;
+            }
             const prevEl = document.getElementById("btn-adm-cap-prev");
             const nextEl = document.getElementById("btn-adm-cap-next");
             if (prevEl) prevEl.disabled = currentPage === 1;
-            if (nextEl) nextEl.disabled = currentPage >= totalPages;
+            if (nextEl) nextEl.disabled = !capturesHasMore && currentPage >= capturesPageCache.length;
 
-            if (pageItems.length === 0) {
-                container.innerHTML = '<p class="text-center text-gray-500 py-10 text-sm">Nenhuma captação encontrada.</p>';
+            if (filtered.length === 0) {
+                container.innerHTML = '<p class="text-center text-gray-500 py-10 text-sm">Nenhuma captação encontrada nesta página.</p>';
                 return;
             }
 
             let html = '<div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5">';
-            pageItems.forEach(c => {
+            filtered.forEach(c => {
                 const date = c.createdAt ? new Date(c.createdAt.seconds * 1000).toLocaleDateString('pt-BR') : '-';
                 const isSigned = c.signatureId && c.signatureStatus === 'signed';
                 const isPending = c.signatureStatus === 'pending';
@@ -517,7 +540,20 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
         };
 
         document.getElementById("btn-adm-cap-prev")?.addEventListener("click", () => { if (currentPage > 1) { currentPage--; renderCapturesCards(); } });
-        document.getElementById("btn-adm-cap-next")?.addEventListener("click", () => { currentPage++; renderCapturesCards(); });
+        document.getElementById("btn-adm-cap-next")?.addEventListener("click", async () => {
+            if (currentPage < capturesPageCache.length) {
+                currentPage++;
+                renderCapturesCards();
+                return;
+            }
+
+            if (!capturesHasMore) return;
+            await fetchNextCapturePage();
+            if (capturesPageCache.length > 0) {
+                currentPage = capturesPageCache.length;
+                renderCapturesCards();
+            }
+        });
         document.getElementById("adm-captures-search")?.addEventListener("input", () => { currentPage = 1; renderCapturesCards(); });
 
         // ════════════════════════════════════════════════════════

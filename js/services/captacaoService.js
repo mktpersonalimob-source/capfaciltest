@@ -24,12 +24,51 @@ window.CaptaFacil = window.CaptaFacil || {};
             return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         },
 
+        async fetchUserCapturesPage(uid, { limitCount = 10, startAfterDoc = null } = {}) {
+            let queryRef = db.collection("captacoes")
+                .where("owner_uid", "==", uid)
+                .orderBy("createdAt", "desc")
+                .limit(limitCount);
+
+            if (startAfterDoc) {
+                queryRef = queryRef.startAfter(startAfterDoc);
+            }
+
+            const snapshot = await queryRef.get();
+            if (counter) counter.addReads(snapshot.size || 1);
+
+            return {
+                items: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+                lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+                hasMore: snapshot.docs.length === limitCount
+            };
+        },
+
         async fetchAllCaptures() {
             const snapshot = await db.collection("captacoes")
                 .orderBy("createdAt", "desc")
                 .get();
             if (counter) counter.addReads(snapshot.size || 1);
             return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        },
+
+        async fetchCapturesPage({ limitCount = 10, startAfterDoc = null } = {}) {
+            let queryRef = db.collection("captacoes")
+                .orderBy("createdAt", "desc")
+                .limit(limitCount);
+
+            if (startAfterDoc) {
+                queryRef = queryRef.startAfter(startAfterDoc);
+            }
+
+            const snapshot = await queryRef.get();
+            if (counter) counter.addReads(snapshot.size || 1);
+
+            return {
+                items: snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })),
+                lastDoc: snapshot.docs[snapshot.docs.length - 1] || null,
+                hasMore: snapshot.docs.length === limitCount
+            };
         },
 
         async saveCapture(data, editId = null) {

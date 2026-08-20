@@ -1,0 +1,366 @@
+// ==========================================================================
+// View: Assinatura Eletrônica de Documento
+// ==========================================================================
+
+window.CaptaFacil = window.CaptaFacil || {};
+window.CaptaFacil.views = window.CaptaFacil.views || {};
+
+(function(exports) {
+    const { db, fb } = exports.firebase;
+    const { alert: showAlert } = exports.modal;
+
+    function renderAssinaturaView() {
+        return `
+            <div class="flex items-center justify-center min-h-screen p-4">
+                <div id="loading-view" class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-t-4 border-b-4 border-orange-500 mx-auto mb-4"></div>
+                    <p class="text-lg text-gray-700 font-semibold">Verificando link de assinatura...</p>
+                </div>
+
+                <div id="error-view" class="hidden text-center max-w-md w-full bg-white p-8 rounded-2xl shadow-xl border border-red-100">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 mb-4">
+                        <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800">Link Inválido ou Expirado</h2>
+                    <p id="error-message" class="text-gray-600 mt-2 text-sm">Este link de assinatura não é válido ou já foi utilizado. Por favor, solicite um novo link ao seu corretor.</p>
+                </div>
+
+                <div id="success-view" class="hidden text-center max-w-md w-full bg-white p-8 rounded-2xl shadow-xl border border-green-100">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-green-100 mb-4">
+                        <svg class="h-6 w-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />
+                        </svg>
+                    </div>
+                    <h2 class="text-xl font-bold text-gray-800">Assinatura Registrada!</h2>
+                    <p class="text-gray-600 mt-2 text-sm">Obrigado! Sua assinatura foi gravada com sucesso. Você já pode fechar esta janela com segurança.</p>
+                </div>
+
+                <div id="signature-view" class="hidden max-w-2xl w-full bg-white p-6 sm:p-8 rounded-2xl shadow-xl border border-orange-100">
+                    <header class="text-center mb-6">
+                        <svg class="w-40 mx-auto mb-2" viewBox="0 0 215 40" xmlns="http://www.w3.org/2000/svg">
+                            <rect x="1" y="1" width="38" height="38" rx="5" fill="#EA580C" />
+                            <path d="M20 12l8 6v8H12v-8l8-6z" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                            <text x="50" y="29" font-family="Inter, sans-serif" font-size="22" font-weight="800" fill="#374151" letter-spacing="-0.5px">Capta</text>
+                            <text x="125" y="29" font-family="Inter, sans-serif" font-size="22" font-weight="800" fill="#EA580C" letter-spacing="-0.5px">Fácil</text>
+                        </svg>
+                        <h1 class="text-2xl font-bold text-gray-800">Autorização de Captação</h1>
+                        <p class="text-sm text-gray-600">Por favor, confirme os dados do imóvel e assine abaixo.</p>
+                    </header>
+
+                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-5">
+                        <h3 class="font-bold text-gray-800 text-sm mb-2 flex items-center gap-1.5">
+                            <span>🏠</span> Dados do Imóvel:
+                        </h3>
+                        <div id="sig-property-details" class="text-xs text-gray-600 leading-relaxed space-y-1.5">Carregando dados...</div>
+                    </div>
+
+                    <!-- Termo de Autorização -->
+                    <div class="bg-orange-50/60 p-4 rounded-xl border border-orange-200 mb-5">
+                        <h3 class="font-bold text-orange-900 text-xs uppercase mb-1 flex items-center gap-1.5">
+                            <span>📜</span> Termo de Autorização:
+                        </h3>
+                        <div id="sig-termo-text" class="text-xs text-gray-700 max-h-32 overflow-y-auto leading-relaxed whitespace-pre-wrap pr-1 bg-white p-3 rounded-lg border border-orange-100">
+                            Carregando termo...
+                        </div>
+                    </div>
+
+                    <div class="space-y-4">
+                        <div>
+                            <label for="sig-owner-name" class="block text-xs font-bold text-gray-700 uppercase mb-1">Nome Completo do Proprietário (Conforme Documento) *</label>
+                            <input type="text" id="sig-owner-name" required class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 text-sm py-2.5 px-3" placeholder="Ex: João da Silva">
+                        </div>
+                        <div>
+                            <label for="sig-owner-cpf" class="block text-xs font-bold text-gray-700 uppercase mb-1">CPF / CNPJ (Opcional)</label>
+                            <input type="text" id="sig-owner-cpf" class="block w-full rounded-xl border-gray-300 shadow-sm focus:border-orange-500 focus:ring-orange-500 text-sm py-2.5 px-3" placeholder="000.000.000-00">
+                        </div>
+                        <div>
+                            <label class="block text-sm font-semibold text-gray-700">Assinatura Manual *</label>
+                            <div class="relative mt-1">
+                                <canvas id="signature-pad" class="w-full h-48 bg-white rounded-xl"></canvas>
+                                <button id="btn-clear-signature" class="absolute top-2 right-2 text-xs bg-gray-100 hover:bg-red-50 text-gray-600 hover:text-red-600 font-semibold px-2 py-1 rounded border">Limpar</button>
+                            </div>
+                            <p class="text-xs text-gray-500 mt-1">Desenhe sua assinatura no quadro acima usando o mouse ou o dedo.</p>
+                        </div>
+                    </div>
+
+                    <div class="mt-6">
+                        <button id="btn-submit-sig" class="w-full flex justify-center items-center px-6 py-3.5 rounded-xl shadow-md text-base font-bold text-white bg-orange-600 hover:bg-orange-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-orange-500 transition-all">
+                            Confirmar e Enviar Assinatura
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }
+
+    function mountAssinaturaView() {
+        let captureId = null;
+        let isDrawing = false;
+        let signaturePad = null;
+        let ctx = null;
+
+        const hash = window.location.hash || "";
+        let token = null;
+        if (hash.includes("token=")) {
+            token = hash.split("token=")[1].split("&")[0];
+        } else {
+            token = new URLSearchParams(window.location.search).get("token");
+        }
+
+        const showView = (id) => {
+            ["loading-view", "error-view", "success-view", "signature-view"].forEach(v => {
+                const el = document.getElementById(v);
+                if (el) el.classList.add("hidden");
+            });
+            const target = document.getElementById(id);
+            if (target) target.classList.remove("hidden");
+        };
+
+        const showError = (msg) => {
+            const errEl = document.getElementById("error-message");
+            if (errEl) errEl.innerText = msg;
+            showView("error-view");
+        };
+
+        const initializeCanvas = () => {
+            signaturePad = document.getElementById('signature-pad');
+            if (!signaturePad) return;
+            ctx = signaturePad.getContext('2d');
+
+            const ratio = Math.max(window.devicePixelRatio || 1, 1);
+            signaturePad.width = signaturePad.offsetWidth * ratio;
+            signaturePad.height = signaturePad.offsetHeight * ratio;
+            ctx.scale(ratio, ratio);
+            ctx.strokeStyle = '#1F2937';
+            ctx.lineWidth = 2.5;
+
+            function getEventPosition(event) {
+                const rect = signaturePad.getBoundingClientRect();
+                if (event.touches && event.touches.length > 0) {
+                    return {
+                        x: event.touches[0].clientX - rect.left,
+                        y: event.touches[0].clientY - rect.top
+                    };
+                }
+                return {
+                    x: event.clientX - rect.left,
+                    y: event.clientY - rect.top
+                };
+            }
+
+            function startDrawing(e) {
+                e.preventDefault();
+                isDrawing = true;
+                const { x, y } = getEventPosition(e);
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+            }
+
+            function draw(e) {
+                if (!isDrawing) return;
+                e.preventDefault();
+                const { x, y } = getEventPosition(e);
+                ctx.lineTo(x, y);
+                ctx.stroke();
+            }
+
+            function stopDrawing() {
+                isDrawing = false;
+                ctx.closePath();
+            }
+
+            signaturePad.addEventListener('mousedown', startDrawing);
+            signaturePad.addEventListener('mousemove', draw);
+            signaturePad.addEventListener('mouseup', stopDrawing);
+            signaturePad.addEventListener('mouseleave', stopDrawing);
+
+            signaturePad.addEventListener('touchstart', startDrawing, { passive: false });
+            signaturePad.addEventListener('touchmove', draw, { passive: false });
+            signaturePad.addEventListener('touchend', stopDrawing);
+
+            document.getElementById('btn-clear-signature')?.addEventListener('click', () => {
+                ctx.clearRect(0, 0, signaturePad.width, signaturePad.height);
+            });
+        };
+
+        const isCanvasBlank = () => {
+            if (!signaturePad || !ctx) return true;
+            const pixelBuffer = new Uint32Array(ctx.getImageData(0, 0, signaturePad.width, signaturePad.height).data.buffer);
+            return !pixelBuffer.some(color => color !== 0);
+        };
+
+        const getPublicIp = async () => {
+            try {
+                const res = await fetch('https://www.cloudflare.com/cdn-cgi/trace');
+                const txt = await res.text();
+                const line = txt.split('\n').find(l => l.startsWith('ip='));
+                if (line) return line.substring(3);
+            } catch (e) {}
+            try {
+                const res = await fetch('https://ipinfo.io/ip');
+                if (res.ok) return await res.text();
+            } catch (e) {}
+            return 'N/A';
+        };
+
+        const submitSignature = async () => {
+            const ownerName = document.getElementById('sig-owner-name')?.value.trim();
+            const ownerCpf = document.getElementById('sig-owner-cpf')?.value.trim();
+
+            if (!ownerName) {
+                showAlert('Por favor, informe seu nome completo.', 'Atenção');
+                return;
+            }
+
+            if (isCanvasBlank()) {
+                showAlert('Por favor, desenhe sua assinatura no quadro.', 'Atenção');
+                return;
+            }
+
+            const btn = document.getElementById('btn-submit-sig');
+            btn.disabled = true;
+            btn.innerText = 'Gravando assinatura...';
+
+            try {
+                const clientIp = await getPublicIp();
+                const deviceInfo = { userAgent: navigator.userAgent };
+                const signatureImage = signaturePad.toDataURL('image/png');
+
+                const batch = db.batch();
+                const signatureRef = db.collection('assinaturas').doc();
+
+                batch.set(signatureRef, {
+                    captureId: captureId,
+                    ownerName: ownerName,
+                    ownerCpf: ownerCpf,
+                    signatureImage: signatureImage,
+                    signedAt: fb.firestore.FieldValue.serverTimestamp(),
+                    clientIp: clientIp,
+                    deviceInfo: deviceInfo,
+                    _token: token
+                });
+
+                const captureRef = db.collection('captacoes').doc(captureId);
+                batch.update(captureRef, {
+                    signatureId: signatureRef.id,
+                    signatureStatus: 'signed',
+                    signatureToken: fb.firestore.FieldValue.delete(),
+                    signatureTokenExpires: fb.firestore.FieldValue.delete()
+                });
+
+                const linkRef = db.collection('signature_links').doc(token);
+                batch.update(linkRef, { usedAt: fb.firestore.FieldValue.serverTimestamp() });
+
+                await batch.commit();
+                showView('success-view');
+
+            } catch (error) {
+                console.error("Erro ao enviar assinatura:", error);
+                showError(`Ocorreu um erro ao enviar sua assinatura: ${error.message}. Tente novamente.`);
+                btn.disabled = false;
+                btn.innerText = 'Confirmar e Enviar Assinatura';
+            }
+        };
+
+        const validateToken = async () => {
+            if (!token) {
+                showError('Token de assinatura não encontrado ou inválido.');
+                return;
+            }
+
+            try {
+                const linkRef = db.collection('signature_links').doc(token);
+                const linkDoc = await linkRef.get();
+
+                if (!linkDoc.exists) {
+                    showError('Este link de assinatura é inválido ou não existe mais.');
+                    return;
+                }
+
+                const data = linkDoc.data();
+                captureId = data.captureId;
+
+                if (data.usedAt) {
+                    showError('Este link já foi utilizado para uma assinatura registrada.');
+                    return;
+                }
+
+                if (data.expiresAt) {
+                    const expires = data.expiresAt.toDate();
+                    if (new Date() > expires) {
+                        showError('Este link de assinatura expirou (validade de 48 horas excedida).');
+                        return;
+                    }
+                }
+
+                // Carregar texto do termo de autorização
+                try {
+                    const termoDoc = await db.collection('configuracoes').doc('textos').get();
+                    const termoText = (termoDoc.exists && termoDoc.data().termoAutorizacao)
+                        ? termoDoc.data().termoAutorizacao
+                        : `AUTORIZAÇÃO DE CAPTAÇÃO DE IMÓVEL\n\nPelo presente instrumento, o PROPRIETÁRIO autoriza a PERSONAL CONSULTORIA IMOBILIÁRIA a realizar a intermediação e divulgação para venda e/ou locação do imóvel descrito, concordando com as condições acordadas.`;
+                    const termoEl = document.getElementById('sig-termo-text');
+                    if (termoEl) termoEl.innerText = termoText;
+                } catch (e) {}
+
+                const detailsEl = document.getElementById('sig-property-details');
+                let detailsHtml = `<p><span class="font-bold text-gray-800">Endereço:</span> ${data.propertyAddress}</p>`;
+                if (data.imovelComplemento) detailsHtml += `<p><span class="font-bold text-gray-800">Complemento:</span> ${data.imovelComplemento}</p>`;
+                if (data.imovelAndar) detailsHtml += `<p><span class="font-bold text-gray-800">Andar:</span> ${data.imovelAndar}</p>`;
+                if (data.codigoImovel) detailsHtml += `<p><span class="font-bold text-blue-700 font-mono">Código do Imóvel:</span> <span class="font-bold font-mono">${data.codigoImovel}</span></p>`;
+                if (data.tipoCaptacao) detailsHtml += `<p><span class="font-bold text-gray-800">Modalidade:</span> ${data.tipoCaptacao}</p>`;
+
+                if (data.valorVenda && data.valorVenda !== 'R$ 0,00') {
+                    detailsHtml += `<p><span class="font-bold text-orange-700">Valor de Venda:</span> <span class="font-bold">${data.valorVenda}</span></p>`;
+                }
+                if (data.valorLocacao && data.valorLocacao !== 'R$ 0,00') {
+                    detailsHtml += `<p><span class="font-bold text-blue-700">Valor Aluguel Residencial:</span> <span class="font-bold">${data.valorLocacao}</span></p>`;
+                }
+                if (data.valorAluguelComercial && data.valorAluguelComercial !== 'R$ 0,00') {
+                    detailsHtml += `<p><span class="font-bold text-indigo-700">Valor Aluguel Comercial:</span> <span class="font-bold">${data.valorAluguelComercial}</span></p>`;
+                }
+
+                if (detailsEl) detailsEl.innerHTML = detailsHtml;
+
+                const nameInput = document.getElementById('sig-owner-name');
+                const cpfInput = document.getElementById('sig-owner-cpf');
+                if (nameInput) nameInput.value = data.ownerName || '';
+                if (cpfInput) {
+                    cpfInput.value = data.ownerCpf || '';
+                    cpfInput.addEventListener('input', (e) => {
+                        let v = e.target.value.replace(/\D/g, '');
+                        if (v.length <= 11) {
+                            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                            v = v.replace(/(\d{3})(\d)/, '$1.$2');
+                            v = v.replace(/(\d{3})(\d{1,2})$/, '$1-$2');
+                        } else {
+                            v = v.substring(0, 14);
+                            v = v.replace(/^(\d{2})(\d)/, '$1.$2');
+                            v = v.replace(/^(\d{2})\.(\d{3})(\d)/, '$1.$2.$3');
+                            v = v.replace(/\.(\d{3})(\d)/, '.$1/$2');
+                            v = v.replace(/(\d{4})(\d)/, '$1-$2');
+                        }
+                        e.target.value = v;
+                    });
+                }
+
+                showView('signature-view');
+                initializeCanvas();
+                document.getElementById('btn-submit-sig')?.addEventListener('click', submitSignature);
+
+            } catch (error) {
+                console.error("Erro ao validar token:", error);
+                showError(`Falha ao verificar link: ${error.message}`);
+            }
+        };
+
+        validateToken();
+    }
+
+    exports.views.assinatura = {
+        render: renderAssinaturaView,
+        mount: mountAssinaturaView
+    };
+})(window.CaptaFacil);

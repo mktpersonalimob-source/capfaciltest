@@ -262,9 +262,20 @@ window.CaptaFacil = window.CaptaFacil || {};
     function populatePrintContainer(data, signatureData = null) {
         ensurePrintContainer();
 
+        const normalizeExportText = (value, fallback = '-') => {
+            if (value === null || value === undefined || value === '') return fallback;
+            if (typeof value !== 'string') return String(value);
+            const normalized = value
+                .replace(/\r\n/g, '\n')
+                .replace(/\n+/g, ' ')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+            return normalized || fallback;
+        };
+
         const setText = (selector, value, upper = false) => {
             document.querySelectorAll(selector).forEach(el => {
-                let finalValue = value || '-';
+                let finalValue = normalizeExportText(value, '-');
                 if (upper && typeof finalValue === 'string') finalValue = finalValue.toUpperCase();
                 el.innerText = finalValue;
             });
@@ -386,7 +397,7 @@ window.CaptaFacil = window.CaptaFacil || {};
         setText('.out-valor-exclusividade', data.valorExclusividade, true);
         
         const termoEl = document.getElementById('out-termo-pdf');
-        if (termoEl) termoEl.innerText = termoAutorizacaoGlobal;
+        if (termoEl) termoEl.innerText = normalizeExportText(termoAutorizacaoGlobal, '');
     }
 
     async function generatePDF(data, triggerButton = null) {

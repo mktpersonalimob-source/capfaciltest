@@ -37,23 +37,24 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
                     <p class="text-gray-600 mt-2 text-sm">Obrigado! Sua assinatura foi gravada com sucesso. Você já pode fechar esta janela com segurança.</p>
                 </div>
 
-                <div id="signature-view" class="hidden max-w-2xl w-full bg-white p-6 sm:p-8 rounded-2xl shadow-xl border border-orange-100">
+                <div id="signature-view" class="hidden max-w-3xl w-full bg-white p-5 sm:p-8 rounded-3xl shadow-2xl border border-orange-100">
                     <header class="text-center mb-6">
-                        <svg class="w-40 mx-auto mb-2" viewBox="0 0 215 40" xmlns="http://www.w3.org/2000/svg">
+                        <svg class="w-40 mx-auto mb-3" viewBox="0 0 215 40" xmlns="http://www.w3.org/2000/svg">
                             <rect x="1" y="1" width="38" height="38" rx="5" fill="#EA580C" />
                             <path d="M20 12l8 6v8H12v-8l8-6z" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
                             <text x="50" y="29" font-family="Inter, sans-serif" font-size="22" font-weight="800" fill="#374151" letter-spacing="-0.5px">Capta</text>
                             <text x="125" y="29" font-family="Inter, sans-serif" font-size="22" font-weight="800" fill="#EA580C" letter-spacing="-0.5px">Fácil</text>
                         </svg>
-                        <h1 class="text-2xl font-bold text-gray-800">Autorização de Captação</h1>
-                        <p class="text-sm text-gray-600">Por favor, confirme os dados do imóvel e assine abaixo.</p>
+                        <h1 class="text-2xl font-black text-gray-800">Autorização de Captação</h1>
+                        <p class="text-sm text-gray-600 mt-1">Por favor, confirme os dados do imóvel e assine abaixo.</p>
                     </header>
 
-                    <div class="bg-gray-50 p-4 rounded-xl border border-gray-200 mb-5">
-                        <h3 class="font-bold text-gray-800 text-sm mb-2 flex items-center gap-1.5">
-                            <span>🏠</span> Dados do Imóvel:
+                    <div class="bg-gradient-to-r from-orange-50 via-white to-amber-50 p-4 rounded-2xl border border-orange-200 mb-5 shadow-sm">
+                        <h3 class="font-bold text-gray-800 text-sm mb-3 flex items-center gap-2">
+                            <span class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-orange-100 text-orange-700">🏠</span>
+                            Dados do Imóvel
                         </h3>
-                        <div id="sig-property-details" class="text-xs text-gray-600 leading-relaxed space-y-1.5">Carregando dados...</div>
+                        <div id="sig-property-details" class="grid gap-2 sm:grid-cols-2 text-xs text-gray-700 leading-relaxed">Carregando dados...</div>
                     </div>
 
                     <!-- Termo de Autorização -->
@@ -210,9 +211,30 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
                 ctx.clearRect(0, 0, signaturePad.width, signaturePad.height);
             });
 
-            const openTermModal = () => {
+            const openTermModal = async () => {
                 const modal = document.getElementById('modal-termo');
-                if (modal) modal.classList.remove('hidden');
+                const termoEl = document.getElementById('sig-termo-text');
+                if (!modal) return;
+
+                if (termoEl && !termoEl.dataset.loaded) {
+                    try {
+                        const termoText = window.CaptaFacil.pdfService && window.CaptaFacil.pdfService.fetchGlobalTermo
+                            ? await window.CaptaFacil.pdfService.fetchGlobalTermo()
+                            : `AUTORIZAÇÃO DE CAPTAÇÃO DE IMÓVEL\n\nPelo presente instrumento, o PROPRIETÁRIO autoriza a PERSONAL CONSULTORIA IMOBILIÁRIA a realizar a intermediação e divulgação para venda e/ou locação do imóvel descrito, concordando com as condições acordadas.`;
+                        if (termoEl) {
+                            termoEl.innerText = termoText;
+                            termoEl.dataset.loaded = 'true';
+                        }
+                    } catch (error) {
+                        console.warn('Erro ao carregar termo de autorização no clique:', error);
+                        if (termoEl) {
+                            termoEl.innerText = `AUTORIZAÇÃO DE CAPTAÇÃO DE IMÓVEL\n\nPelo presente instrumento, o PROPRIETÁRIO autoriza a PERSONAL CONSULTORIA IMOBILIÁRIA a realizar a intermediação e divulgação para venda e/ou locação do imóvel descrito, concordando com as condições acordadas.`;
+                            termoEl.dataset.loaded = 'true';
+                        }
+                    }
+                }
+
+                modal.classList.remove('hidden');
             };
 
             const closeTermModal = () => {
@@ -339,16 +361,6 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
                         return;
                     }
                 }
-
-                // Carregar texto do termo de autorização
-                try {
-                    const termoDoc = await db.collection('configuracoes').doc('textos').get();
-                    const termoText = (termoDoc.exists && termoDoc.data().termoAutorizacao)
-                        ? termoDoc.data().termoAutorizacao
-                        : `AUTORIZAÇÃO DE CAPTAÇÃO DE IMÓVEL\n\nPelo presente instrumento, o PROPRIETÁRIO autoriza a PERSONAL CONSULTORIA IMOBILIÁRIA a realizar a intermediação e divulgação para venda e/ou locação do imóvel descrito, concordando com as condições acordadas.`;
-                    const termoEl = document.getElementById('sig-termo-text');
-                    if (termoEl) termoEl.innerText = termoText;
-                } catch (e) {}
 
                 const detailsEl = document.getElementById('sig-property-details');
                 let detailsHtml = `<p><span class="font-bold text-gray-800">Endereço:</span> ${data.propertyAddress}</p>`;

@@ -57,12 +57,38 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
                     </div>
 
                     <!-- Termo de Autorização -->
-                    <div class="bg-orange-50/60 p-4 rounded-xl border border-orange-200 mb-5">
-                        <h3 class="font-bold text-orange-900 text-xs uppercase mb-1 flex items-center gap-1.5">
-                            <span>📜</span> Termo de Autorização:
-                        </h3>
-                        <div id="sig-termo-text" class="text-xs text-gray-700 max-h-32 overflow-y-auto leading-relaxed whitespace-pre-wrap pr-1 bg-white p-3 rounded-lg border border-orange-100">
-                            Carregando termo...
+                    <div class="mb-5 flex justify-end">
+                        <button id="btn-ver-termo" type="button" class="group inline-flex items-center gap-2.5 px-4 py-2.5 rounded-xl border border-orange-200 bg-gradient-to-r from-orange-50 to-amber-50 text-orange-700 text-xs font-bold shadow-sm hover:shadow-md hover:border-orange-300 hover:from-orange-100 hover:to-amber-100 transition-all duration-200">
+                            <span class="flex items-center justify-center w-7 h-7 rounded-lg bg-white text-orange-600 shadow-sm group-hover:scale-105 transition-transform">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.747 0-3.332.477-4.5 1.253z" />
+                                </svg>
+                            </span>
+                            Ver termo
+                        </button>
+                    </div>
+
+                    <div id="modal-termo" class="hidden fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
+                        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full overflow-hidden border border-orange-100">
+                            <div class="flex justify-between items-center p-4 border-b border-gray-200 bg-gradient-to-r from-orange-50 via-amber-50 to-white">
+                                <div class="flex items-center gap-3">
+                                    <div class="flex items-center justify-center w-9 h-9 rounded-full bg-orange-100 text-orange-700">
+                                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.747 0-3.332.477-4.5 1.253z" />
+                                        </svg>
+                                    </div>
+                                    <h3 class="text-base font-bold text-orange-900">Termo de Autorização</h3>
+                                </div>
+                                <button id="btn-fechar-termo" type="button" class="text-gray-400 hover:text-gray-600 text-2xl font-bold leading-none w-8 h-8 rounded-full hover:bg-white transition-colors">&times;</button>
+                            </div>
+                            <div class="p-5 max-h-[70vh] overflow-y-auto bg-gray-50/60">
+                                <div id="sig-termo-text" class="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap bg-white p-4 rounded-xl border border-orange-100 shadow-sm">
+                                    Carregando termo...
+                                </div>
+                            </div>
+                            <div class="border-t border-gray-200 px-5 py-4 flex justify-end bg-white">
+                                <button id="btn-fechar-termo-acao" type="button" class="px-5 py-2.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold rounded-xl shadow-sm transition-colors">Fechar</button>
+                            </div>
                         </div>
                     </div>
 
@@ -182,6 +208,25 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
 
             document.getElementById('btn-clear-signature')?.addEventListener('click', () => {
                 ctx.clearRect(0, 0, signaturePad.width, signaturePad.height);
+            });
+
+            const openTermModal = () => {
+                const modal = document.getElementById('modal-termo');
+                if (modal) modal.classList.remove('hidden');
+            };
+
+            const closeTermModal = () => {
+                const modal = document.getElementById('modal-termo');
+                if (modal) modal.classList.add('hidden');
+            };
+
+            document.getElementById('btn-ver-termo')?.addEventListener('click', openTermModal);
+            document.getElementById('btn-fechar-termo')?.addEventListener('click', closeTermModal);
+            document.getElementById('btn-fechar-termo-acao')?.addEventListener('click', closeTermModal);
+            document.getElementById('modal-termo')?.addEventListener('click', (event) => {
+                if (event.target && event.target.id === 'modal-termo') {
+                    closeTermModal();
+                }
             });
         };
 

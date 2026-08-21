@@ -1173,12 +1173,18 @@ window.CaptaFacil.views = window.CaptaFacil.views || {};
             const pdfButton = e.target.closest("[data-adm-pdf]");
             const pdfId = pdfButton?.getAttribute("data-adm-pdf");
             if (pdfId) {
-                let capture = allCapturesCache.find(c => c.id === pdfId);
+                let capture = (capturesPageCache || []).flat().find(c => c.id === pdfId)
+                    || allCapturesCache.find(c => c.id === pdfId);
+
                 if (!capture) {
-                    capture = await captacaoService.getById(pdfId);
+                    capture = await captacaoService.getById(pdfId).catch(() => null);
                     if (capture) allCapturesCache.push(capture);
                 }
-                if (capture) await generatePDF(capture, pdfButton);
+
+                if (capture) {
+                    const openPdf = () => generatePDF(capture, pdfButton);
+                    openPdf();
+                }
                 return;
             }
 

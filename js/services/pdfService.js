@@ -259,6 +259,21 @@ window.CaptaFacil = window.CaptaFacil || {};
         return container;
     }
 
+    async function waitForImageToLoad(imgEl) {
+        if (!imgEl || !imgEl.src) return;
+        if (imgEl.complete && imgEl.naturalWidth > 0) return;
+
+        await new Promise((resolve) => {
+            const done = () => {
+                imgEl.removeEventListener('load', done);
+                imgEl.removeEventListener('error', done);
+                resolve();
+            };
+            imgEl.addEventListener('load', done, { once: true });
+            imgEl.addEventListener('error', done, { once: true });
+        });
+    }
+
     function populatePrintContainer(data, signatureData = null) {
         ensurePrintContainer();
 
@@ -431,6 +446,11 @@ window.CaptaFacil = window.CaptaFacil || {};
             } : null);
 
             populatePrintContainer(data, signatureData);
+            const signImageEl = document.getElementById('pdf-signature-image');
+            if (signImageEl && signImageEl.src) {
+                await waitForImageToLoad(signImageEl);
+            }
+
             const element = document.getElementById('print-container');
             if (!element) throw new Error('Container do PDF não foi encontrado.');
 
